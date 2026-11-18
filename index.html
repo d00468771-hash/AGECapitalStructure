@@ -20,6 +20,13 @@
     <section id="firms" hidden>
       <h2>Question c: Firm U and Firm L</h2>
       <p class="note" id="firms-note"></p>
+      <div class="lever">
+        <label for="firm-slider">Firm L's debt: <strong id="firm-debt-out"></strong></label>
+        <input type="range" id="firm-slider" min="0" step="1">
+        <div class="buttons"><button type="button" id="btn-case">Case ($10,000)</button></div>
+        <p class="note" id="firm-rate-note"></p>
+      </div>
+      <dl class="compare" id="firm-compare"></dl>
       <div class="firm-grid">
         <div>
           <h3>Firm U <span class="tag">no debt</span></h3>
@@ -37,6 +44,19 @@
       <h2>Question d: CDSS at each amount of borrowing</h2>
       <dl class="facts" id="cdss-facts"></dl>
       <div id="checks"></div>
+
+      <div class="lever">
+        <label for="cdss-slider">CDSS's debt: <strong id="cdss-debt-out"></strong></label>
+        <input type="range" id="cdss-slider" min="0" step="1">
+        <p class="note">The slider stops only at the banker's amounts.</p>
+        <div class="buttons">
+          <button type="button" id="btn-best">Best price</button>
+          <button type="button" id="btn-eps">Highest EPS</button>
+        </div>
+        <div id="pick-note"></div>
+      </div>
+      <table class="lever-table" id="lever-table"></table>
+      <div id="stake-note"></div>
 
       <h3>Case method (questions d(3) and d(4)): buy back at today's <span id="p0"></span></h3>
       <p class="note">Shares repurchased = D / P₀. EPS = net income / shares remaining. Price = EPS / r<sub>s</sub>. WACC uses book weights: D/A × r<sub>d</sub>(1 − T) + (A − D)/A × r<sub>s</sub>.</p>

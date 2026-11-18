@@ -220,10 +220,34 @@
     return Math.abs(a - b) <= (tol || 1e-9) * Math.max(1, Math.abs(a), Math.abs(b));
   }
 
+  // Management's stake after the buyback. Management doesn't sell, so its
+  // shares stay at m × n while the total falls to the shares remaining.
+  // status: 'ok', 'all' (no outside shareholders left) or 'sell' (the buyback
+  // needs more shares than outsiders own, so management would have to sell).
+  function managementStake(m, n, repurchased, remaining) {
+    const outside = (1 - m) * n;
+    if (near(repurchased, outside)) return { stake: 1, status: 'all' };
+    if (repurchased > outside) return { stake: null, status: 'sell' };
+    return { stake: (m * n) / remaining, status: 'ok' };
+  }
+
+  // Which row a button should go to. If both buyback methods pick the same
+  // amount, go there; if not, go to the case method's amount and say so.
+  function pickDebt(caseIdx, newIdx) {
+    return { index: caseIdx, agree: caseIdx === newIdx, caseIdx, newIdx };
+  }
+
+  // The Firm L slider's stops: 0 to slider_max in steps of slider_step.
+  function sliderStops(max, step) {
+    const out = [];
+    for (let i = 0; i * step <= max + 1e-9; i++) out.push(i * step);
+    return out;
+  }
+
   const api = {
     parseCSV, num, toLookup, readCdss, readSchedule,
     roundHalfUp, fmt, stats, exampleFirm, cdssEbit, cdssAt, cdssTable,
-    bestIndex, bests, near,
+    bestIndex, bests, near, managementStake, pickDebt, sliderStops,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

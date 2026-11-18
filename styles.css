@@ -100,3 +100,28 @@ tr.stat td { background: var(--accent-soft); }
   .cdss-table td:first-child { font-weight: 700; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 4px; }
   .cdss-table td:first-child::before { content: "Debt"; font-weight: 400; }
 }
+
+/* ---------- Levers ---------- */
+.lever { margin: 16px 0 10px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.lever label { display: block; margin-bottom: 6px; }
+.lever input[type="range"] { width: 100%; accent-color: var(--accent); }
+.lever .note { margin-bottom: 0; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+button {
+  font: inherit; font-size: 0.95rem; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent-soft); color: var(--text);
+}
+button:hover { background: var(--accent); color: var(--surface); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.lever-table td, .lever-table th { white-space: normal; }
+.lever-table thead th { font-size: 0.85rem; }
+.lever-table th:not(:first-child) { width: 34%; }
+
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 0 8px; }
+.compare div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.compare dt { font-size: 0.8rem; color: var(--muted); }
+.compare dd { margin: 0; font-variant-numeric: tabular-nums; font-size: 0.92rem; }
+
+.cdss-table tr.selected td { outline: none; box-shadow: inset 0 0 0 9999px rgba(31, 111, 92, 0.10); }
+.cdss-table .flag.sel { color: var(--accent); font-weight: 600; }

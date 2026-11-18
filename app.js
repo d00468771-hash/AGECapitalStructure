@@ -61,16 +61,18 @@
     ['WACC', (r, m) => f.pct(m.wacc)],
   ];
 
-  function cdssTable(rows, method, bestPriceIdx, waccLabel) {
+  function cdssTable(rows, method, bestPriceIdx, waccLabel, selIdx) {
     const plain = h => h.replace(/<[^>]+>/g, '');
     const head = '<thead><tr>' + COLS.map(c =>
       '<th scope="col">' + (c[0] === 'WACC' ? 'WACC (' + waccLabel + ')' : c[0]) + '</th>').join('') + '</tr></thead>';
     const body = rows.map((r, i) => {
       const m = r[method];
-      const cls = i === bestPriceIdx ? ' class="best"' : '';
+      const classes = [i === bestPriceIdx ? 'best' : '', i === selIdx ? 'selected' : ''].filter(Boolean);
+      const cls = classes.length ? ' class="' + classes.join(' ') + '"' : '';
       return '<tr' + cls + '>' + COLS.map((c, j) => {
         let v = c[1](r, m);
         if (j === 0 && i === bestPriceIdx) v += '<span class="flag">highest price</span>';
+        if (j === 0 && i === selIdx) v += '<span class="flag sel">◀ slider</span>';
         const label = c[0] === 'WACC' ? 'WACC (' + waccLabel + ')' : plain(c[0]);
         return '<td data-label="' + esc(label) + '">' + v + '</td>';
       }).join('') + '</tr>';
@@ -121,6 +123,64 @@
     return '<h3 style="margin-top:0">Which amount of debt?</h3>' + verdict + '<ul>' + items.map(i => '<li>' + i + '</li>').join('') + '</ul>';
   }
 
+  // ---------- CDSS debt lever ----------
+
+  function stakeCell(cdss, m) {
+    const s = C.managementStake(cdss.management_share, cdss.shares_outstanding, m.repurchased, m.remaining);
+    if (s.status === 'ok') return f.pct(s.stake);
+    if (s.status === 'all') return f.pct(1) + ' *';
+    return '⚠ would have to sell';
+  }
+
+  function stakeNotes(cdss, r) {
+    const out = [];
+    [['case method', r.caseMethod], ['new-price method', r.newPrice]].forEach(([name, m]) => {
+      const s = C.managementStake(cdss.management_share, cdss.shares_outstanding, m.repurchased, m.remaining);
+      if (s.status === 'all') {
+        out.push('<p class="note">* Under the ' + name + ', the buyback takes exactly the outside investors\' ' +
+          f.shares((1 - cdss.management_share) * cdss.shares_outstanding) + ' shares, so no outside shareholders would be left.</p>');
+      } else if (s.status === 'sell') {
+        out.push('<div class="warning">Under the ' + name + ', the buyback needs ' + f.shares(m.repurchased) +
+          ' shares, more than the ' + f.shares((1 - cdss.management_share) * cdss.shares_outstanding) +
+          ' that outside investors own, so management would have to sell.</div>');
+      }
+    });
+    return out.join('');
+  }
+
+  function leverTable(cdss, r) {
+    const a = r.caseMethod, b = r.newPrice;
+    const tie = r.tie === null ? 'n/a' : f.mult(r.tie);
+    const rows = [
+      ['Share price', f.cents(a.price), f.cents(b.price)],
+      ['Shares repurchased', f.shares(a.repurchased), f.shares(b.repurchased)],
+      ['Shares remaining', f.shares(a.remaining), f.shares(b.remaining)],
+      ['EPS', f.cents(a.eps), f.cents(b.eps)],
+      ['Dividends per share', f.cents(a.dps), f.cents(b.dps)],
+      ['TIE', tie, tie],
+      ['WACC', f.pct(a.wacc) + ' <span class="tag">book</span>', f.pct(b.wacc) + ' <span class="tag">market</span>'],
+      ['Management\'s share', stakeCell(cdss, a), stakeCell(cdss, b)],
+    ];
+    return '<thead><tr><th></th><th>Buy back at ' + f.cents(cdss.share_price) + ' (case)</th><th>Buy back at new price</th></tr></thead><tbody>' +
+      rows.map(x => '<tr><td>' + x[0] + '</td><td>' + x[1] + '</td><td>' + x[2] + '</td></tr>').join('') + '</tbody>';
+  }
+
+  // ---------- Firm L lever ----------
+
+  function firmCompare(u, l) {
+    const both = (fu, fl) => 'U ' + fu + ' · L ' + fl;
+    const tieMean = x => (x.tie ? f.mult(x.tie.mean) : 'n/a');
+    const tieSd = x => (x.tie ? f.mult(x.tie.sd) : 'n/a');
+    const items = [
+      ['E(ROE)', both(f.pct(u.roe.mean), f.pct(l.roe.mean))],
+      ['σ(ROE)', both(f.pct(u.roe.sd), f.pct(l.roe.sd))],
+      ['CV(ROE)', both(f.two(u.roe.cv), f.two(l.roe.cv))],
+      ['E(TIE)', both(tieMean(u), tieMean(l))],
+      ['σ(TIE)', both(tieSd(u), tieSd(l))],
+    ];
+    return items.map(x => '<div><dt>' + x[0] + '</dt><dd>' + x[1] + '</dd></div>').join('');
+  }
+
   // ---------- Start ----------
 
   async function main() {
@@ -143,10 +203,27 @@
 
       // Firm U and Firm L
       const firmU = C.exampleFirm({ totalAssets: ex.total_assets, debt: 0, rate: ex.interest_rate, tax, scenarios });
-      const firmL = C.exampleFirm({ totalAssets: ex.total_assets, debt: ex.firm_l_debt, rate: ex.interest_rate, tax, scenarios });
       $('firm-u').innerHTML = firmTable(firmU, tax);
-      $('firm-l').innerHTML = firmTable(firmL, tax);
-      $('firm-l-tag').textContent = f.dollars(firmL.debt) + ' of ' + f.pct(firmL.rate).replace('.00', '') + ' debt';
+      const rateTxt = f.pct(ex.interest_rate).replace('.00', '');
+      const stops = C.sliderStops(ex.slider_max, ex.slider_step);
+      const fs = $('firm-slider');
+      fs.max = String(stops.length - 1);
+      function setFirmDebt(i) {
+        fs.value = String(i);
+        const firmL = C.exampleFirm({ totalAssets: ex.total_assets, debt: stops[i], rate: ex.interest_rate, tax, scenarios });
+        $('firm-debt-out').textContent = f.dollars(firmL.debt);
+        $('firm-l').innerHTML = firmTable(firmL, tax);
+        $('firm-l-tag').textContent = f.dollars(firmL.debt) + ' of ' + rateTxt + ' debt';
+        $('firm-compare').innerHTML = firmCompare(firmU, firmL);
+        fs.setAttribute('aria-valuetext', f.dollars(firmL.debt));
+      }
+      fs.addEventListener('input', () => setFirmDebt(Number(fs.value)));
+      const caseStop = stops.findIndex(d => C.near(d, ex.firm_l_debt));
+      $('btn-case').textContent = 'Case (' + f.dollars(ex.firm_l_debt) + ')';
+      $('btn-case').addEventListener('click', () => setFirmDebt(caseStop >= 0 ? caseStop : 0));
+      $('firm-rate-note').textContent = 'The interest rate is held at ' + rateTxt +
+        ' at every amount of debt, so the slider shows what debt does to Firm L\'s return and risk, not how lenders would respond.';
+      setFirmDebt(caseStop >= 0 ? caseStop : 0);
       $('firms-note').textContent = 'Both firms have ' + f.dollars(ex.total_assets) + ' of assets and a ' +
         f.pct(tax).replace('.00', '') + ' tax rate. Bad, average and good years have the probabilities in ebit_scenarios.csv.';
       $('firms').hidden = false;
@@ -164,9 +241,32 @@
       $('cdss-facts').innerHTML = facts.map(x => '<div><dt>' + x[0] + '</dt><dd>' + x[1] + '</dd></div>').join('');
       $('p0').textContent = f.cents(cdss.share_price);
       $('checks').innerHTML = checks(cdss, rows);
-      $('case-table').innerHTML = cdssTable(rows, 'caseMethod', b.casePrice, 'book weights');
-      $('new-table').innerHTML = cdssTable(rows, 'newPrice', b.newPrice, 'market weights');
       $('summary').innerHTML = summary(rows);
+
+      const cs = $('cdss-slider');
+      cs.max = String(rows.length - 1);
+      function setCdssDebt(i, note) {
+        cs.value = String(i);
+        const r = rows[i];
+        $('cdss-debt-out').textContent = f.dollars(r.debt);
+        cs.setAttribute('aria-valuetext', f.dollars(r.debt));
+        $('lever-table').innerHTML = leverTable(cdss, r);
+        $('stake-note').innerHTML = stakeNotes(cdss, r);
+        $('pick-note').innerHTML = note || '';
+        $('case-table').innerHTML = cdssTable(rows, 'caseMethod', b.casePrice, 'book weights', i);
+        $('new-table').innerHTML = cdssTable(rows, 'newPrice', b.newPrice, 'market weights', i);
+      }
+      function go(what, caseIdx, newIdx) {
+        const p = C.pickDebt(caseIdx, newIdx);
+        const note = p.agree ? '' :
+          '<div class="warning">' + what + ': the $20 buyback picks ' + f.dollars(rows[p.caseIdx].debt) +
+          ' and the new-price buyback picks ' + f.dollars(rows[p.newIdx].debt) + '. The slider is at the case method\'s amount.</div>';
+        setCdssDebt(p.index, note);
+      }
+      cs.addEventListener('input', () => setCdssDebt(Number(cs.value)));
+      $('btn-best').addEventListener('click', () => go('Highest share price', b.casePrice, b.newPrice));
+      $('btn-eps').addEventListener('click', () => go('Highest EPS', b.caseEps, b.newEps));
+      setCdssDebt(0);
       $('cdss').hidden = false;
 
       $('status').textContent = '';
